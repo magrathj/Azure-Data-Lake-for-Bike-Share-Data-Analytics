@@ -90,7 +90,7 @@ Since the data from Divvy are anonymous, we have generated fake rider and accoun
   cd ../../
 ```
 
-![Resource Group New](/images/resource_group.png)
+![Resource Group New](/images/resource_group%20-%20Copy.png)
 
 
 
