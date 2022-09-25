@@ -1,5 +1,1 @@
-pandas
-psycopg2
-pyyaml
-argparse
-dbt-databricks
+databricks-cli

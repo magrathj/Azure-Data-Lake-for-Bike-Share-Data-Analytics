@@ -1,21 +1,20 @@
 # Azure-Modern-Data-Warehouse
-Building an Azure Data Warehouse for Bike Share Data Analytics. Project to load data from Postgres DB in Azure into Azure Synapse.
+Building an Azure Data Lake for Bike Share Data Analytics
 
 ## Overview of Project
 
+In this project, you'll build a data lake solution for Divvy bikeshare.
+
 Divvy is a bike sharing program in Chicago, Illinois USA that allows riders to purchase a pass at a kiosk or use a mobile application to unlock a bike at stations around the city and use the bike for a specified amount of time. The bikes can be returned to the same station or to another station. The City of Chicago makes the anonymized bike trip data publicly available for projects like this where we can analyze the data.
 
-Since the data from Divvy are anonymous, we have created fake rider and account profiles along with fake payment data to go along with the data from Divvy
+Since the data from Divvy are anonymous, we have generated fake rider and account profiles along with fake payment data to go along with the data from Divvy. 
 
+### The goal of this project is to develop a data lake solution using Azure Databricks using a lake house architecture. You will:
 
-The goal of this project is to develop a data warehouse solution using Azure Synapse Analytics. You will:
-
-
-
-### Design a star schema based on the business outcomes listed below;
-* Import the data into Synapse;
-* Transform the data into the star schema;
-* and finally, view the reports from Analytics.
+* Design a star schema based on the business outcomes below;
+* Import the data into Azure Databricks using Delta Lake to create a Bronze data store;
+* Create a gold data store in Delta Lake tables;
+* Transform the data into the star schema for a Gold data store;
 
 ### The business outcomes you are designing for are as follows:
 * Analyze how much time is spent per ride
@@ -78,9 +77,8 @@ The goal of this project is to develop a data warehouse solution using Azure Syn
 
 
 ## Task 1: Create your Azure resources
-* Create an Azure PostgreSQL database
-* Create an Azure Synapse workspace
-* Create a Dedicated SQL Pool and database within the Synapse workspace
+* Create an Azure Databricks Workspace
+  * Databricks cluster
 
 ***Run Terraform Script*** 
 
@@ -99,96 +97,50 @@ The goal of this project is to develop a data warehouse solution using Azure Syn
 ## Task 2: Design a star schema
 You are being provided a relational schema that describes the data as it exists in PostgreSQL. In addition, you have been given a set of business requirements related to the data warehouse. You are being asked to design a star schema using fact and dimension tables.
 
-![Star Schema](/images/star_schema_design.png)
+![Star Schema](/images/udacitysynapse_star.png)
 
-## Task 3: Create the data in PostgreSQL
-To prepare your environment for this project, you first must create the data in PostgreSQL. This will simulate the production environment where the data is being used in the OLTP system. 
-
-***Run the ETL setup script to import data into Azure Postgres***
-
-
-Create virtual env
+## Task 3: Upload data to Databricks
 
 ```bash
-    python -m venv venv
+  pip install -r requirement.txt
 ```
-
-Activate virtual env 
 
 ```bash
-    venv/Scripts/activate
+  databricks configure --token
 ```
 
-Install required packages
 
 ```bash
-  pip install -r requirement.txt    
+  bash import_to_databricks.sh
 ```
 
-Allow access to the database
+![Upload](/images/data_in_dbfs.png)
 
-![Firewall](/images/postgres_firewall.png)
+## Task 4: EXTRACT the data from DBFS into Bronze tables
+In your Azure Databricks workspace, you will use an ingestion script to extract the uploaded zip files
 
-Run ETL script to set up Postgres Database 
+Unzip zip files
 ```bash
-  python src/etl_postgres/etl.py
+  python src/databricks/0_unzip_files.py
 ```
 
-Verify Postgres Database is populated
+Ingest files into bronze table 
 ```bash
-  python src/etl_postgres/test.py
+  python src/databricks/1_ingestion.py
 ```
 
+## Task 5: Transform the data into Silver tables 
 
-## Task 4: EXTRACT the data from PostgreSQL
-In your Azure Synapse workspace, you will use the ingest wizard to create a one-time pipeline that ingests the data from PostgreSQL into Azure Blob Storage. This will result in all four tables being represented as text files in Blob Storage, ready for loading into the data warehouse.
-
-![Copy1](/images/copy_data.png)
-
-![staging](/images/staging_data.png)
-
-
-## Task 5: LOAD the data into external tables in the data warehouse
-Once in Blob storage, the files will be shown in the data lake node in the Synapse Workspace. From here, you can use the script generating function to load the data from blob storage into external staging tables in the data warehouse you created using the Dedicated SQL Pool.
-
-
-![CopyAndLoad](/images/copy_and_load.png)
-
-![Data](/images/loaded_staging_tables.png)
-
-
-
-## Task 6: TRANSFORM the data to the star schema
-You will write SQL scripts to transform the data from the staging tables to the final star schema you designed.
-
-
-Transform the data into the Star schema
+Transform files into silver table 
 ```bash
-  python src/etl_synapse/etl.py
+  python src/databricks/2_bronze_to_silver.py
 ```
 
-## Analysis: Extras
-* Based on how many rides the rider averages per month
+## Task 6: Populate the data into Gold tables 
 
-
-```sql
-  SELECT SUM(t.trip_counter), 
-  t.user_id, 
-  d.month
-  FROM [star].[Trip] t
-  JOIN [star].[Date] d
-  ON t.start_at_date_id = d.date_id
-  GROUP BY t.user_id, d.month
+Populate data into gold table 
+```bash
+  python src/databricks/3_silver_to_gold.py
 ```
 
-* Based on how many minutes the rider spends on a bike per month
 
-```sql
-  SELECT SUM(t.total_trip_time_seconds)/60, 
-  t.user_id, 
-  d.month
-  FROM [star].[Trip] t
-  JOIN [star].[Date] d
-  ON t.start_at_date_id = d.date_id
-  GROUP BY t.user_id, d.month
-```
