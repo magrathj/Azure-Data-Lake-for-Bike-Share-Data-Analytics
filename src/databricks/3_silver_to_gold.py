@@ -19,85 +19,98 @@ for file in data_lake_tables:
 # COMMAND ----------
 
 # DBTITLE 1,Dates
-# MAGIC %sql
-# MAGIC CREATE TABLE Gold_Date (
-# MAGIC     date_id INT,
-# MAGIC     day INT NOT NULL,
-# MAGIC     month INT NOT NULL,
-# MAGIC     year INT NOT NULL,
-# MAGIC     day_of_week VARCHAR(100) NOT NULL
-# MAGIC )
-# MAGIC USING DELTA
+spark.sql(f"""
+CREATE TABLE Gold_Date (
+    date_id INT,
+    day INT NOT NULL,
+    month INT NOT NULL,
+    year INT NOT NULL,
+    day_of_week VARCHAR(100) NOT NULL
+)
+USING DELTA
+LOCATION '/delta/Gold_Date'
+""")
+
 
 # COMMAND ----------
 
-# MAGIC %sql
-# MAGIC CREATE TABLE Gold_Time (
-# MAGIC     time_id INT,
-# MAGIC     hour INT NOT NULL,
-# MAGIC     min INT NOT NULL,
-# MAGIC     second INT NOT NULL
-# MAGIC )
-# MAGIC USING DELTA
+spark.sql(f"""
+CREATE TABLE Gold_Time (
+    time_id INT,
+    hour INT NOT NULL,
+    min INT NOT NULL,
+    second INT NOT NULL
+)
+USING DELTA
+LOCATION '/delta/Gold_Time'
+""")
 
 # COMMAND ----------
 
 # DBTITLE 1,Riders
-# MAGIC %sql
-# MAGIC CREATE TABLE gold_users (
-# MAGIC     user_id INT,
-# MAGIC     address VARCHAR(100) ,
-# MAGIC     first_name VARCHAR(100), 
-# MAGIC     second_name VARCHAR(100), 
-# MAGIC     birth_date DATE, 
-# MAGIC     is_member BOOLEAN,
-# MAGIC     member_start_date_id INT,
-# MAGIC     member_end_date_id INT
-# MAGIC )
-# MAGIC USING DELTA
+spark.sql(f"""
+CREATE TABLE gold_users (
+    user_id INT,
+    address VARCHAR(100) ,
+    first_name VARCHAR(100), 
+    second_name VARCHAR(100), 
+    birth_date DATE, 
+    is_member BOOLEAN,
+    member_start_date_id INT,
+    member_end_date_id INT
+)
+USING DELTA
+LOCATION '/delta/gold_users'
+""")
 
 # COMMAND ----------
 
 # DBTITLE 1,Payments
-# MAGIC %sql
-# MAGIC CREATE TABLE gold_payments (
-# MAGIC     payment_id INT,
-# MAGIC     user_id INT NOT NULL,
-# MAGIC     payment_date_id INT NOT NULL,
-# MAGIC     payment_amount FLOAT NOT NULL
-# MAGIC )
-# MAGIC USING DELTA
+spark.sql(f"""
+CREATE TABLE gold_payments (
+    payment_id INT,
+    user_id INT NOT NULL,
+    payment_date_id INT NOT NULL,
+    payment_amount FLOAT NOT NULL
+)
+USING DELTA
+LOCATION '/delta/gold_payments'
+""")
 
 # COMMAND ----------
 
 # DBTITLE 1,Stations
-# MAGIC %sql
-# MAGIC CREATE TABLE gold_stations (
-# MAGIC     station_id VARCHAR(50), 
-# MAGIC     station_name VARCHAR(75), 
-# MAGIC     station_latitude FLOAT, 
-# MAGIC     station_longitude FLOAT
-# MAGIC )
-# MAGIC USING DELTA
+spark.sql(f"""
+CREATE TABLE gold_stations (
+    station_id VARCHAR(50), 
+    station_name VARCHAR(75), 
+    station_latitude FLOAT, 
+    station_longitude FLOAT
+)
+USING DELTA
+LOCATION '/delta/gold_stations'
+""")
 
 # COMMAND ----------
 
 # DBTITLE 1,Trips
-# MAGIC %sql
-# MAGIC CREATE TABLE gold_trips (
-# MAGIC     trip_id VARCHAR(100),
-# MAGIC     trip_counter INT NOT NULL,
-# MAGIC     start_at_time_id INT NOT NULL,
-# MAGIC     start_at_date_id INT NOT NULL,
-# MAGIC     end_at_time_id INT NOT NULL, 
-# MAGIC     end_at_date_id INT NOT NULL,
-# MAGIC     total_trip_time_seconds INT NOT NULL,
-# MAGIC     user_id INT NOT NULL,
-# MAGIC     rideable_type VARCHAR(100),
-# MAGIC     start_station_id VARCHAR(50),
-# MAGIC     end_station_id VARCHAR(50)
-# MAGIC )
-# MAGIC USING DELTA
+spark.sql(f"""
+CREATE TABLE gold_trips (
+    trip_id VARCHAR(100),
+    trip_counter INT NOT NULL,
+    start_at_time_id INT NOT NULL,
+    start_at_date_id INT NOT NULL,
+    end_at_time_id INT NOT NULL, 
+    end_at_date_id INT NOT NULL,
+    total_trip_time_seconds INT NOT NULL,
+    user_id INT NOT NULL,
+    rideable_type VARCHAR(100),
+    start_station_id VARCHAR(50),
+    end_station_id VARCHAR(50)
+)
+USING DELTA
+LOCATION '/delta/gold_trips'
+""")
 
 # COMMAND ----------
 
@@ -106,58 +119,67 @@ for file in data_lake_tables:
 
 # COMMAND ----------
 
-# DBTITLE 1,Create Payments Fact
-# MAGIC %sql
-# MAGIC INSERT INTO gold_payments
-# MAGIC SELECT DISTINCT
-# MAGIC         CAST(p.payment_id AS INT),
-# MAGIC         CAST(r.rider_id AS INT), 
-# MAGIC        UNIX_TIMESTAMP(CAST (p.date AS DATE)),
-# MAGIC        CAST(p.amount AS FLOAT)
-# MAGIC FROM silver_payments p
-# MAGIC JOIN silver_riders r 
-# MAGIC ON r.rider_id = p.rider_id
+# DBTITLE 1,payments
+payments_df = spark.read.table("silver_payments")
+riders_df = spark.read.table("silver_riders") 
+
+(
+    payments_df.alias("p")
+    .join(riders_df.alias("r"), ['rider_id'])
+    .selectExpr("CAST(p.payment_id AS INT) AS payment_id", 
+                "CAST(r.rider_id AS INT) AS user_id", 
+                "CAST(UNIX_TIMESTAMP(CAST (p.date AS DATE)) AS INTEGER) AS payment_date_id", 
+                "CAST(p.amount AS FLOAT) AS payment_amount")
+    .distinct()
+    .write.format("delta")
+    .mode("overwrite")
+    .saveAsTable("gold_payments")
+)
 
 # COMMAND ----------
 
-# DBTITLE 1,Create Station Dim
-# MAGIC %sql
-# MAGIC INSERT INTO gold_stations
-# MAGIC SELECT DISTINCT
-# MAGIC     s.station_id,
-# MAGIC     s.name,
-# MAGIC     s.latitude,
-# MAGIC     s.longitude
-# MAGIC FROM silver_stations s
+# DBTITLE 1,Stations
+stations_df = spark.read.table("silver_stations")
+
+(
+    stations_df.alias("s")
+    .selectExpr("s.station_id AS station_id", 
+                "s.name AS station_name", 
+                "CAST(s.latitude AS FLOAT) AS station_latitude", 
+                "CAST(s.longitude AS FLOAT) AS station_longitude")
+    .distinct()
+    .write.format("delta")
+    .mode("overwrite")
+    .saveAsTable("gold_stations")
+)
 
 # COMMAND ----------
 
-# DBTITLE 1,Create Trip Fact
-# MAGIC %sql
-# MAGIC INSERT INTO gold_trips
-# MAGIC SELECT DISTINCT
-# MAGIC     t.trip_id,
-# MAGIC     1,
-# MAGIC     (
-# MAGIC       hour(to_timestamp(CONCAT(start_at, ':00'), 'dd/MM/yyyy HH:mm:ss')) * 3600 + 
-# MAGIC       minute(to_timestamp(CONCAT(start_at, ':00'), 'dd/MM/yyyy HH:mm:ss')) * 60) + 
-# MAGIC       second(to_timestamp(CONCAT(start_at, ':00'), 'dd/MM/yyyy HH:mm:ss')
-# MAGIC     ),
-# MAGIC     UNIX_TIMESTAMP(to_date(CONCAT(start_at, ':00'), 'dd/MM/yyyy HH:mm:ss')),
-# MAGIC     (
-# MAGIC       hour(to_timestamp(CONCAT(ended_at, ':00'), 'dd/MM/yyyy HH:mm:ss')) * 3600 + 
-# MAGIC       minute(to_timestamp(CONCAT(ended_at, ':00'), 'dd/MM/yyyy HH:mm:ss')) * 60) + 
-# MAGIC       second(to_timestamp(CONCAT(ended_at, ':00'), 'dd/MM/yyyy HH:mm:ss')
-# MAGIC     ),
-# MAGIC     UNIX_TIMESTAMP(to_date(CONCAT(ended_at, ':00'), 'dd/MM/yyyy HH:mm:ss')),
-# MAGIC     CAST(to_timestamp(CONCAT(ended_at, ':00'), 'dd/MM/yyyy HH:mm:ss') AS LONG) - CAST(to_timestamp(CONCAT(start_at, ':00'), 'dd/MM/yyyy HH:mm:ss') AS LONG),
-# MAGIC     r.rider_id,
-# MAGIC     t.rideable_type,
-# MAGIC     t.start_station_id,
-# MAGIC     t.end_station_id
-# MAGIC FROM silver_trips t
-# MAGIC JOIN silver_riders r 
-# MAGIC ON t.rider_id = r.rider_id
+# DBTITLE 1,Trips
+trips_df = spark.read.table("silver_trips")
+riders_df = spark.read.table("silver_riders") 
+
+(
+    trips_df.alias("t")
+    .join(riders_df.alias("r"), ['rider_id'])
+    .selectExpr(
+                "t.trip_id AS trip_id",
+                "1 AS trip_counter",
+                "(hour(to_timestamp(CONCAT(start_at, ':00'), 'dd/MM/yyyy HH:mm:ss')) * 3600 + minute(to_timestamp(CONCAT(start_at, ':00'), 'dd/MM/yyyy HH:mm:ss')) * 60) +    second(to_timestamp(CONCAT(start_at, ':00'), 'dd/MM/yyyy HH:mm:ss')) AS start_at_time_id",
+                "CAST(UNIX_TIMESTAMP(to_date(CONCAT(start_at, ':00'), 'dd/MM/yyyy HH:mm:ss')) AS INTEGER) AS start_at_date_id",
+                "(hour(to_timestamp(CONCAT(ended_at, ':00'), 'dd/MM/yyyy HH:mm:ss')) * 3600 + minute(to_timestamp(CONCAT(ended_at, ':00'), 'dd/MM/yyyy HH:mm:ss')) * 60) +   second(to_timestamp(CONCAT(ended_at, ':00'), 'dd/MM/yyyy HH:mm:ss')) AS end_at_time_id",
+                "CAST(UNIX_TIMESTAMP(to_date(CONCAT(ended_at, ':00'), 'dd/MM/yyyy HH:mm:ss')) AS INTEGER) AS end_at_date_id",
+                "CAST(CAST(to_timestamp(CONCAT(ended_at, ':00'), 'dd/MM/yyyy HH:mm:ss') AS LONG) - CAST(to_timestamp(CONCAT(start_at, ':00'), 'dd/MM/yyyy HH:mm:ss') AS LONG) AS INTEGER) AS total_trip_time_seconds",
+                "CAST(r.rider_id AS INTEGER) AS user_id",
+                "t.rideable_type AS rideable_type",
+                "t.start_station_id",
+                "t.end_station_id"
+               )
+    .distinct()
+    .write.format("delta")
+    .mode("overwrite")
+    .saveAsTable("gold_trips")
+)
 
 # COMMAND ----------
 
@@ -175,7 +197,7 @@ df = df.selectExpr("CAST(UNIX_TIMESTAMP(calendarDate) AS INTEGER) AS date_id",
                    "MONTH(calendarDate) AS MONTH", 
                    "YEAR(calendarDate) AS YEAR", 
                    "CAST(DAYOFWEEK(calendarDate) AS STRING) AS day_of_week")
-df.write.format("delta").mode("append").saveAsTable("gold_date")
+df.write.format("delta").mode("overwrite").saveAsTable("gold_date")
 
 # COMMAND ----------
 
@@ -195,7 +217,7 @@ df = df.selectExpr("""hour(calendarDate) * 3600 + minute(calendarDate) * 60 + se
                    "minute(calendarDate) AS min",
                    "second(calendarDate) AS second"
                   )
-df.write.format("delta").mode("append").saveAsTable("gold_time")
+df.write.format("delta").mode("overwrite").saveAsTable("gold_time")
 
 # COMMAND ----------
 
