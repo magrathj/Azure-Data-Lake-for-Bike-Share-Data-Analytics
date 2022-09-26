@@ -4,8 +4,8 @@ data_lake_tables = [
     {'silver_table':'silver_riders', 'gold_table':'gold_users'},
     {'silver_table':'silver_stations', 'gold_table':'gold_stations'},
     {'silver_table':'silver_trips', 'gold_table':'gold_trips'},
-    {'gold_table':'gold_date'}, 
-    {'gold_table':'gold_time'},
+    {'gold_table':'Gold_Date'}, 
+    {'gold_table':'Gold_Time'},
 ]
 
 data_lake_tables
@@ -15,6 +15,7 @@ data_lake_tables
 for file in data_lake_tables:
     print(f"""DROP TABLE IF EXISTS {file['gold_table']}""")
     spark.sql(f"""DROP TABLE IF EXISTS {file['gold_table']}""")
+    dbutils.fs.rm(f"dbfs:/delta/{file['gold_table']}", True)
 
 # COMMAND ----------
 
@@ -105,6 +106,7 @@ CREATE TABLE gold_trips (
     total_trip_time_seconds INT NOT NULL,
     user_id INT NOT NULL,
     rideable_type VARCHAR(100),
+    age INT,
     start_station_id VARCHAR(50),
     end_station_id VARCHAR(50)
 )
@@ -172,6 +174,7 @@ riders_df = spark.read.table("silver_riders")
                 "CAST(CAST(to_timestamp(CONCAT(ended_at, ':00'), 'dd/MM/yyyy HH:mm:ss') AS LONG) - CAST(to_timestamp(CONCAT(start_at, ':00'), 'dd/MM/yyyy HH:mm:ss') AS LONG) AS INTEGER) AS total_trip_time_seconds",
                 "CAST(r.rider_id AS INTEGER) AS user_id",
                 "t.rideable_type AS rideable_type",
+                "CAST(floor(datediff(current_date(), to_date(birthday))/365.25) AS INTEGER) AS age",
                 "t.start_station_id",
                 "t.end_station_id"
                )

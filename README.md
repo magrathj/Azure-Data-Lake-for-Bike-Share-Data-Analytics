@@ -97,7 +97,7 @@ Since the data from Divvy are anonymous, we have generated fake rider and accoun
 ## Task 2: Design a star schema
 You are being provided a relational schema that describes the data as it exists in PostgreSQL. In addition, you have been given a set of business requirements related to the data warehouse. You are being asked to design a star schema using fact and dimension tables.
 
-![Star Schema](/images/udacitysynapse_star.png)
+![Star Schema](/images/Azure%20Databricks%20-%20hive_metastore.png)
 
 ## Task 3: Upload data to Databricks
 
